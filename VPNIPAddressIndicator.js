@@ -38,7 +38,7 @@ export const VPNIPAddressIndicator = GObject.registerClass(
                 icon_size: 16,
                 style_class: 'system-status-icon'
             });
-            
+
             this.buttonText = new St.Label({
                 text: 'No VPN IP',
                 y_align: Clutter.ActorAlign.CENTER,
@@ -48,6 +48,16 @@ export const VPNIPAddressIndicator = GObject.registerClass(
             this.box.add_child(this.defaultIcon);
             this.add_child(this.box);
 
+            // store last seen vpn ip so the click handler can copy it
+            this._lastVpnIp = '';
+            // connect once to avoid adding multiple handlers during updates
+            this.connect('button-press-event', () => {
+                if (this._lastVpnIp) {
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, this._lastVpnIp);
+                    debugLog(`Copied VPN IP to clipboard: ${this._lastVpnIp}`);
+                }
+            });
+
             debugLog("VPNIPAddressIndicator initialized.");
             this._updateLabel();
         }
@@ -55,17 +65,17 @@ export const VPNIPAddressIndicator = GObject.registerClass(
         _updateLabel() {
             const priority = 0;
             const refreshTime = 5;
-        
+
             if (this._timeout) {
                 GLib.source_remove(this._timeout);
                 this._timeout = undefined;
             }
-        
+
             this._timeout = GLib.timeout_add_seconds(priority, refreshTime, async () => {
                 try {
-                    const vpnIp = await Utils.getVpnIp(); 
+                    const vpnIp = await Utils.getVpnIp();
                     debugLog(`VPN Indicator says: ${vpnIp}`);
-        
+
                     if (vpnIp) {
                         this.buttonText.set_text(vpnIp);
                         if (this.box.contains(this.defaultIcon)) {
@@ -77,10 +87,8 @@ export const VPNIPAddressIndicator = GObject.registerClass(
                         if (!this.box.contains(this.buttonText)) {
                             this.box.add_child(this.buttonText);
                         }
-                        this.connect('button-press-event', () => {
-                            St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, vpnIp);
-                            debugLog(`Copied VPN IP to clipboard: ${vpnIp}`);
-                        });
+                        // save last ip so the single click handler can use it
+                        this._lastVpnIp = vpnIp;
                     } else {
                         if (this.box.contains(this.buttonText)) {
                             this.box.remove_child(this.buttonText);
@@ -95,10 +103,10 @@ export const VPNIPAddressIndicator = GObject.registerClass(
                 } catch (error) {
                     debugLog(`Error updating VPN IP: ${error.message}`);
                 }
-        
+
                 return GLib.SOURCE_CONTINUE;
             });
-        }        
+        }
 
         destroy() {
             if (this._timeout) {
